@@ -103,7 +103,9 @@ service cloud.firestore {
         && request.resource.data.role == resource.data.role
         && request.resource.data.email == resource.data.email
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(["name", "phone", "address", "pickupInstructions"])
+          .hasOnly(["name", "phone", "address", "pickupInstructions", "chatRead"])
+        && (!("chatRead" in request.resource.data.diff(resource.data).affectedKeys())
+            || (request.resource.data.chatRead is map && request.resource.data.chatRead.size() <= 500))
         && str(request.resource.data.name, 100)
         && strOpt(request.resource.data.get("phone", ""), 40)
         && strOpt(request.resource.data.get("address", ""), 600)
@@ -119,7 +121,8 @@ service cloud.firestore {
         && (!("verified" in request.resource.data.diff(resource.data).affectedKeys())
             || (resource.data.role == "ngo" && request.resource.data.verified is bool));
 
-      allow delete: if false;
+      // Admin can delete a donor / NGO profile (never another admin).
+      allow delete: if isAdmin() && resource.data.role != "admin";
     }
 
     // =====================================================
@@ -286,6 +289,53 @@ service cloud.firestore {
 
         ||
 
+        // ---------- DONOR SAVES HANDOVER QR HASH ----------
+        (
+          isDonor()
+          && resource.data.donorId == request.auth.uid
+          && resource.data.status == "accepted"
+          && request.resource.data.status == "accepted"
+          && resource.data.get("handoverPickedBy", null) == null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["handoverHash"])
+          && request.resource.data.handoverHash is string
+          && request.resource.data.handoverHash.size() == 64
+        )
+
+        ||
+
+        // ---------- NGO VERIFIES PICKUP (QR scanned) ----------
+        (
+          isNGO()
+          && resource.data.status == "accepted"
+          && resource.data.acceptedBy == request.auth.uid
+          && request.resource.data.status == "accepted"
+          && resource.data.get("handoverHash", null) != null
+          && resource.data.get("handoverPickedBy", null) == null
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["handoverPickedAt", "handoverPickedBy", "handoverVolunteer"])
+          && request.resource.data.handoverPickedBy == request.auth.uid
+          && request.resource.data.handoverPickedAt == request.time
+          && str(request.resource.data.handoverVolunteer, 60)
+        )
+
+        ||
+
+        // ---------- NGO CONFIRMS FOOD RECEIVED ----------
+        (
+          isNGO()
+          && resource.data.status == "accepted"
+          && resource.data.acceptedBy == request.auth.uid
+          && request.resource.data.status == "accepted"
+          && resource.data.get("handoverPickedBy", null) != null
+          && resource.data.get("handoverReceivedBy", null) == null
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(["handoverReceivedAt", "handoverReceivedBy"])
+          && request.resource.data.handoverReceivedBy == request.auth.uid
+          && request.resource.data.handoverReceivedAt == request.time
+        )
+
+        ||
+
         // ---------- ADMIN REMOVES A DONATION ----------
         (
           isAdmin()
@@ -375,6 +425,26 @@ service cloud.firestore {
             || isAdmin()
           );
 
+        // ---------------------------------------------------
+        // HANDOVER QR TOKEN (secret). Only the donor can write / read it.
+        // The NGO never reads it; it only compares the scanned token's
+        // hash with donations/{id}.handoverHash.
+        // ---------------------------------------------------
+        allow create, update: if isDonor()
+          && privateDoc == "handover"
+          && request.resource.data.keys().hasOnly(["donorId", "token", "updatedAt"])
+          && request.resource.data.donorId == request.auth.uid
+          && request.resource.data.token is string
+          && request.resource.data.token.size() == 16
+          && get(/databases/$(database)/documents/donations/$(donationId)).data.donorId
+            == request.auth.uid
+          && get(/databases/$(database)/documents/donations/$(donationId)).data.status
+            == "accepted";
+
+        allow get: if isDonor()
+          && privateDoc == "handover"
+          && resource.data.donorId == request.auth.uid;
+
         allow list, delete: if false;
       }
     }
@@ -424,7 +494,7 @@ service cloud.firestore {
         && (
           isAdmin()
           || (
-            signedIn()
+            hasProfile() && notBlocked()
             && request.resource.data.keys().hasOnly([
               "totalDonors", "totalNGOs", "totalDonations",
               "completedDonations", "mealPortionsReported",
@@ -460,7 +530,8 @@ service cloud.firestore {
             )
           )
           || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            hasProfile() && notBlocked()
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               "totalDonors", "totalNGOs", "totalDonations",
               "completedDonations", "mealPortionsReported",
               "recentDonations", "updatedAt"
