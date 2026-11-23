@@ -9,12 +9,13 @@ FoodBridge is a web app (PWA) that connects donors with surplus food to NGOs tha
 The app has three types of users:
 
 - **Donor:** posts surplus food, with a photo.
-- **NGO:** accepts donations, schedules pickups and chats with the donor.
-- **Admin:** oversees the whole system, handles reports and can block users.
+- **NGO:** gets verified, then accepts donations, schedules pickups and chats with the donor.
+- **Admin:** verifies NGOs, oversees the whole system, handles reports and can block users.
 
 ### Features
 
 - Post food donations with photo upload
+- NGO verification: NGOs are reviewed by an admin before they can accept donations
 - NGOs can accept donations
 - Schedule and confirm pickup times
 - Chat between donor and NGO
@@ -23,6 +24,14 @@ The app has three types of users:
 - Admin dashboard
 - Email notifications (on acceptance and pickup scheduling)
 - Installable on phones (PWA / Android APK)
+
+### NGO Verification
+
+To keep donations safe and trustworthy, a new NGO account is not active right away:
+
+1. The NGO signs up and submits its details for verification.
+2. The admin reviews the request from the Admin Dashboard.
+3. Once approved, the NGO can accept donations and schedule pickups.
 
 ## Technology Stack
 
@@ -69,7 +78,11 @@ Also add your new site address in Firebase Console > Authentication > Settings >
 
 ### 4. Test with three accounts
 
-Donor, NGO, admin: post, accept, schedule, confirm, chat, complete, rate, report, block.
+Donor, NGO, admin: post, accept, schedule, confirm, chat, complete, rate, report, block. Also test NGO verification: sign up as an NGO, approve it as admin, then accept a donation.
+
+## Security Note
+
+The Firebase web API key in `index.html` is a public client key and is restricted to this site's domains in Google Cloud Console. Data access is protected by `firestore.rules`.
 
 ## Author
 
