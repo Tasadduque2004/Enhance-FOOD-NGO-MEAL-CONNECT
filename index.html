@@ -1469,4 +1469,45 @@ w.appendChild(b);
 }
 }catch(e){}})();
 </script>
+<script id="fb-back-js">
+/* Browser/phone Back button support: each in-app "page" (menu, panels, popups, chat, login) gets a history entry,
+   so Back closes the top layer instead of leaving the whole site. */
+(function(){try{
+if(!window.history||!history.pushState)return;
+var $=function(i){return document.getElementById(i)};
+function has(id,c){var e=$(id);return !!e&&e.classList.contains(c)}
+function click(id){var b=$(id);if(b)b.click()}
+var layers=[
+ {on:function(){return has("detailModal","open")},close:function(){click("detailModalClose")}},
+ {on:function(){return has("howModal","open")},close:function(){click("howClose")}},
+ {on:function(){return has("sideDrawer","open")},close:function(){click("drawerClose")}},
+ {on:function(){return has("fullPage","open")&&has("chatLayout","in-chat")},close:function(){click("chatBack")}},
+ {on:function(){return has("fullPage","open")},close:function(){click("fullPageBack")}},
+ {on:function(){var b=$("mobilePageBack");return !!b&&!b.classList.contains("hidden")},close:function(){click("mobilePageBack")}},
+ {on:function(){var a=$("authView");return !!a&&!a.classList.contains("hidden")},close:function(){click("homeBtn")}}
+];
+var hDepth=0,ignore=0,timer=null;
+function depth(){var n=0;for(var i=0;i<layers.length;i++){if(layers[i].on())n++}return n}
+function closeTop(){for(var i=0;i<layers.length;i++){if(layers[i].on()){layers[i].close();return true}}return false}
+function sync(){
+ var d=depth();
+ if(d>hDepth){while(hDepth<d){hDepth++;history.pushState({fbLayer:hDepth},"",location.href)}}
+ else if(d<hDepth){var back=hDepth-d;hDepth=d;ignore++;history.go(-back)}
+}
+try{history.replaceState({fbLayer:0},"",location.href)}catch(e){}
+window.addEventListener("popstate",function(ev){
+ if(ignore>0){ignore--;return}
+ var target=(ev.state&&ev.state.fbLayer)||0;
+ if(target>hDepth){ignore++;history.go(hDepth-target);return}
+ var guard=0;
+ while(depth()>target&&guard++<8){if(!closeTop())break}
+ hDepth=target;
+ clearTimeout(timer);timer=setTimeout(sync,30);
+});
+var mo=new MutationObserver(function(){clearTimeout(timer);timer=setTimeout(sync,30)});
+["detailModal","howModal","sideDrawer","chatLayout","fullPage","mobilePageBack","authView"].forEach(function(id){
+ var e=$(id);if(e)mo.observe(e,{attributes:true,attributeFilter:["class"]});
+});
+}catch(e){}})();
+</script>
 </body></html>
